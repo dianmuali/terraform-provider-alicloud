@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+
 	"strconv"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
@@ -92,6 +94,23 @@ func resourceAliyunNatGateway() *schema.Resource {
 				MaxItems: 4,
 				Optional: true,
 			},
+
+			"instance_charge_type": &schema.Schema{
+				Type:         schema.TypeString,
+				Optional:     true,
+				ForceNew:     true,
+				Default:      PostPaid,
+				ValidateFunc: validateInstanceChargeType,
+			},
+
+			"period": &schema.Schema{
+				Type:             schema.TypeInt,
+				Optional:         true,
+				ForceNew:         true,
+				Default:          1,
+				DiffSuppressFunc: ecsPostPaidDiffSuppressFunc,
+				ValidateFunc:     validateRouterInterfaceChargeTypePeriod,
+			},
 		},
 	}
 }
@@ -103,6 +122,17 @@ func resourceAliyunNatGatewayCreate(d *schema.ResourceData, meta interface{}) er
 	args.RegionId = string(client.Region)
 	args.VpcId = string(d.Get("vpc_id").(string))
 	args.Spec = string(d.Get("specification").(string))
+	args.InstanceChargeType = d.Get("instance_charge_type").(string)
+	if args.InstanceChargeType == string(PrePaid) {
+		period := d.Get("period").(int)
+		args.Duration = strconv.Itoa(period)
+		args.PricingCycle = string(Month)
+		if period > 9 {
+			args.Duration = strconv.Itoa(period / 12)
+			args.PricingCycle = string(Year)
+		}
+		args.AutoPay = requests.NewBoolean(true)
+	}
 	args.ClientToken = buildClientToken(args.GetActionName())
 	bandwidthPackages := []vpc.CreateNatGatewayBandwidthPackage{}
 	for _, e := range d.Get("bandwidth_packages").([]interface{}) {
